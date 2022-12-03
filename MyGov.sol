@@ -9,6 +9,8 @@ contract MyGov is ERC20{
     uint tokens_to_mint = 10000000;
     mapping(address => bool) public took_faucet;
     address payable owner;
+    uint donatedEthers = 0;
+    uint donatedTokens = 0;
 
     /* constructor */
     constructor(uint tokensupply) ERC20("My Gov Token", "MYG"){
@@ -23,18 +25,20 @@ contract MyGov is ERC20{
         took_faucet[msg.sender] = true;
         tokens_to_mint -= 1;
         _mint(msg.sender,1);
-
     }
 
     function donateEther() public payable
     {
         (bool success,) = owner.call{value: msg.value}("");
-        require(success, "Failed to send money");
+        require(success, "Failed to donate ethers");
+        donatedEthers += msg.value;
     }
 
     function donateMyGovToken(uint amount) public 
     {
-        transfer(owner,amount);
+        (bool success) = transfer(owner,amount);
+        require(success, "Failed to donate tokens");
+        donatedTokens += amount;
     }
 
     function message() public view returns (string memory) {
