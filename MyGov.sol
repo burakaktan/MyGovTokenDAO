@@ -26,6 +26,25 @@ contract MyGov is ERC20{
 
     survey [] surveys;
 
+
+    struct ProjectData { 
+        string ipfshash;
+        uint votedeadline;
+        uint [] paymentamounts;
+        uint [] payschedule;
+        uint yesCount;
+        address owner;
+        bool reserved;
+        mapping(address => bool) voters;
+    }
+
+    uint public userCount = 0; // TODO: what about the owner?
+    mapping(uint => ProjectData) public projects;
+    uint projectId = 0;
+
+    uint reservedWei = 0;
+
+
     function submitSurvey(string memory ipfshash, uint surveydeadline, uint numchoices, uint atmostchoice) payable public returns (uint surveyid)
     {
         // 2 token, 0.04 ether
@@ -100,6 +119,7 @@ contract MyGov is ERC20{
         took_faucet[msg.sender] = true;
         tokens_to_mint -= 1;
         _mint(msg.sender,1);
+        userCount++;
     }
 
     function donateEther(uint amount) public payable returns(uint amount2)
@@ -115,7 +135,73 @@ contract MyGov is ERC20{
        (bool success) = transfer(payable(address(this)),amount);
         require(success, "Failed to donate tokens");
         donatedTokens += amount;
+
+        // if user has no MyGov, then it is not included in voting portion calculation.
+        if(balanceOf(msg.sender) == 0){
+            userCount--;
+        }
     }
+
+    // TODO: check whether payschedule is incremental and after votedeadline
+    function submitProjectProposal(string memory ipfshash, uint votedeadline,uint [] memory paymentamounts, uint [] memory payschedule) public returns (uint projectid) {
+        require(2 < votedeadline);
+        // require(block.timestamp < votedeadline);
+        projectid = projectId;
+        projects[projectid].ipfshash = ipfshash;
+        projects[projectid].votedeadline = votedeadline;
+        projects[projectid].paymentamounts = paymentamounts;
+        projects[projectid].payschedule = payschedule;
+        projects[projectid].owner = msg.sender;
+
+        return projectid;
+    }
+
+    // TODO: delegate vote
+    function voteForProjectProposal(uint projectid,bool choice) public{
+        require(2 < projects[projectid].votedeadline);
+        // require(block.timestamp < votedeadline);
+        require(balanceOf(msg.sender) > 0); // should have MyGov to vote
+        require(projects[projectid].voters[msg.sender] == false); // user hasn't voted yet
+
+        projects[projectid].voters[msg.sender] = true;
+        if(choice){
+            projects[projectid].yesCount = projects[projectid].yesCount + 1;
+        }
+
+        // TODO: will you keep no counts?
+    }
+
+
+    function voteForProjectPayment(uint projectid,bool choice) public{
+
+
+    }
+
+
+    function reserveProjectGrant(uint projectid) public{
+        require(block.timestamp < projects[projectid].votedeadline);
+        require(!projects[projectid].reserved); // can not reserve more than once.
+        
+        require(projects[projectid].yesCount * 10 >= userCount); // check if 10% said yes
+        
+        uint total_payment = 0;
+        for(uint i=0; i<projects[projectid].paymentamounts.length; i++){
+            total_payment += projects[projectid].paymentamounts[i];
+        }
+
+        // TODO: time trigger??
+
+        require(owner.balance - reservedWei >= total_payment); 
+
+        reservedWei += total_payment;
+        projects[projectid].reserved = true;
+    }
+
+
+    function withdrawProjectPayment(uint projectid) public{
+
+    }
+
 
     receive() external payable {}
     fallback() external payable {}
