@@ -27,24 +27,6 @@ contract MyGov is ERC20{
     survey [] surveys;
 
 
-    struct ProjectData { 
-        string ipfshash;
-        uint votedeadline;
-        uint [] paymentamounts;
-        uint [] payschedule;
-        uint yesCount;
-        address owner;
-        bool reserved;
-        mapping(address => bool) voters;
-    }
-
-    uint public userCount = 0; // TODO: what about the owner?
-    mapping(uint => ProjectData) public projects;
-    uint projectId = 0;
-
-    uint reservedWei = 0;
-
-
     function submitSurvey(string memory ipfshash, uint surveydeadline, uint numchoices, uint atmostchoice) payable public returns (uint surveyid)
     {
         // 2 token, 0.04 ether
@@ -142,33 +124,92 @@ contract MyGov is ERC20{
         }
     }
 
+    struct Voter
+    {
+        address delegating_to;
+        bool did_vote;
+        uint power;
+        bool choice;
+    }
+
+
+    struct ProjectData { 
+        string ipfshash;
+        uint votedeadline;
+        uint [] paymentamounts;
+        uint [] yesCounts_payment;
+        uint [] payschedule;
+        uint yesCount;
+        address owner;
+        bool reserved;
+        mapping(address => Voter) voters;
+    }
+
+    uint public userCount = 0; // TODO: what about the owner?
+    mapping(uint => ProjectData) public projects;
+    uint projectId = 0;
+
+    uint reservedWei = 0;
+
     // TODO: check whether payschedule is incremental and after votedeadline
-    function submitProjectProposal(string memory ipfshash, uint votedeadline,uint [] memory paymentamounts, uint [] memory payschedule) public returns (uint projectid) {
+    function submitProjectProposal(string memory ipfshash, uint votedeadline,uint [] memory paymentamounts, uint [] memory payschedule) public payable returns (uint projectid) {
         require(2 < votedeadline);
         // require(block.timestamp < votedeadline);
+        //payments --> 5 token, 0.01 ether
+        donateMyGovToken(5);
+        require(msg.value == 10000000000000000, "you should pay 0.01 ethers");  
+        donateEther(10000000000000000); // 4*(10**16) --> 0.04 ether
         projectid = projectId;
+        projectId++;
         projects[projectid].ipfshash = ipfshash;
         projects[projectid].votedeadline = votedeadline;
         projects[projectid].paymentamounts = paymentamounts;
         projects[projectid].payschedule = payschedule;
+        projects[projectid].yesCounts_payment = new uint[](payschedule.length);
         projects[projectid].owner = msg.sender;
 
         return projectid;
     }
 
-    // TODO: delegate vote
     function voteForProjectProposal(uint projectid,bool choice) public{
-        require(2 < projects[projectid].votedeadline);
+        require(2 < projects[projectid].votedeadline, "voting deadline is passed");
         // require(block.timestamp < votedeadline);
-        require(balanceOf(msg.sender) > 0); // should have MyGov to vote
-        require(projects[projectid].voters[msg.sender] == false); // user hasn't voted yet
-
-        projects[projectid].voters[msg.sender] = true;
-        if(choice){
-            projects[projectid].yesCount = projects[projectid].yesCount + 1;
+        require(balanceOf(msg.sender) > 0,"in order to vote, you should be a member"); // should have MyGov to vote
+        require(projects[projectid].voters[msg.sender].did_vote == false, "you already have voted, you can't vote again"); // user hasn't voted yet
+        if(projects[projectid].voters[msg.sender].power == 0)
+        {
+            projects[projectid].voters[msg.sender].power = 1;
         }
+        projects[projectid].voters[msg.sender].choice = choice;
+        projects[projectid].voters[msg.sender].did_vote = true;
+        if(choice){
+            projects[projectid].yesCount += projects[projectid].voters[msg.sender].power;
+        }
+    }
 
-        // TODO: will you keep no counts?
+    function delegateVoteTo(address memberaddr, uint projectid) public{
+        require(memberaddr != msg.sender, "you can't delegate yourself");
+        require(!projects[projectid].voters[msg.sender].did_vote, "you already voted");
+        projects[projectid].voters[msg.sender].did_vote = true;
+        projects[projectid].voters[msg.sender].delegating_to = memberaddr;
+        // loop check
+        address ptr = projects[projectid].voters[msg.sender].delegating_to;
+        while(projects[projectid].voters[ptr].delegating_to != address(0))
+        {
+            ptr = projects[projectid].voters[ptr].delegating_to;
+            require(ptr != msg.sender, "loop detected");
+        }
+        projects[projectid].voters[msg.sender].delegating_to = ptr;
+        // did delegated person vote
+        if(projects[projectid].voters[ptr].did_vote)
+        {
+            if(projects[projectid].voters[ptr].choice)
+                projects[projectid].yesCount += projects[projectid].voters[msg.sender].power;
+        }
+        else
+        {
+            projects[projectid].voters[ptr].power += projects[projectid].voters[msg.sender].power;
+        }
     }
 
 
@@ -191,7 +232,7 @@ contract MyGov is ERC20{
 
         // TODO: time trigger??
 
-        require(owner.balance - reservedWei >= total_payment); 
+        require(address(this).balance - reservedWei >= total_payment); 
 
         reservedWei += total_payment;
         projects[projectid].reserved = true;
