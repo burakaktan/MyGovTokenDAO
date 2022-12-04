@@ -192,6 +192,7 @@ contract MyGov is ERC20{
 
     function delegateVoteTo(address memberaddr, uint projectid) public{
         require(memberaddr != msg.sender, "you can't delegate yourself");
+        require(balanceOf(msg.sender) > 0,"in order to delegate vote, you should be a member"); // should have MyGov to vote
         require(!projects[projectid].voters[msg.sender].did_vote, "you already voted");
         projects[projectid].voters[msg.sender].did_vote = true;
         projects[projectid].voters[msg.sender].delegating_to = memberaddr;
@@ -203,6 +204,10 @@ contract MyGov is ERC20{
             require(ptr != msg.sender, "loop detected");
         }
         projects[projectid].voters[msg.sender].delegating_to = ptr;
+        if(projects[projectid].voters[ptr].power == 0){
+            projects[projectid].voters[ptr].power = 1;
+        }
+        projects[projectid].voters[ptr].power += 1;
         // did delegated person vote
         if(projects[projectid].voters[ptr].did_vote)
         {
