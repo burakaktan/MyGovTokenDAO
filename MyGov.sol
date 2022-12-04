@@ -152,6 +152,8 @@ contract MyGov is ERC20{
 
     uint reservedWei = 0;
 
+    uint no_funded = 0;
+
     // TODO: check whether payschedule is incremental and after votedeadline
     function submitProjectProposal(string memory ipfshash, uint votedeadline,uint [] memory paymentamounts, uint [] memory payschedule) public payable returns (uint projectid) {
         require(2 < votedeadline);
@@ -237,14 +239,14 @@ contract MyGov is ERC20{
 
         reservedWei += total_payment;
         projects[projectid].reserved = true;
+        no_funded++;
     }
 
 
     function withdrawProjectPayment(uint projectid) public{
 
     }
-    
-    
+
     function getProjectOwner(uint projectid) public view returns(address projectowner)
     {
         return projects[projectid].owner;
