@@ -143,6 +143,7 @@ contract MyGov is ERC20{
         address owner;
         bool reserved;
         mapping(address => Voter) voters;
+        uint ethers_received;
     }
 
     uint public userCount = 0; // TODO: what about the owner?
@@ -241,6 +242,61 @@ contract MyGov is ERC20{
 
     function withdrawProjectPayment(uint projectid) public{
 
+    }
+    
+    
+    function getProjectOwner(uint projectid) public view returns(address projectowner)
+    {
+        return projects[projectid].owner;
+    }
+
+    function getProjectInfo(uint projectid) public view returns(string memory ipfshash, uint votedeadline,uint [] memory paymentamounts, uint [] memory payschedule) 
+    {
+        return (
+            projects[projectid].ipfshash,
+            projects[projectid].votedeadline,
+            projects[projectid].paymentamounts,
+            projects[projectid].payschedule
+        );
+    }
+
+    function getNoOfProjectProposals() public view returns(uint numproposals)
+    {
+        /*
+        because projectId is initially 0 and increments by one after each project proposal submission,
+        it can be considered as number of project proposals 
+        */
+        return projectId; 
+    }
+
+    function getIsProjectFunded(uint projectid) public view returns(bool funded)
+    {
+        return projects[projectid].reserved;
+    }
+
+    function getProjectNextPayment(uint projectid) public view returns(uint next)
+    {
+        require(projects[projectid].reserved, "the project isn't funded");
+        uint i = 0;
+        for(i = 0; i < projects[projectid].payschedule.length;i++)
+        {
+            if(projects[projectid].payschedule[i] > block.timestamp)
+                return projects[projectid].payschedule[i];
+        }
+        /*
+        if control reaches here, there is no future payments
+        */
+        require(false,"no future payments");
+    }
+
+    function getNoOfFundedProjects () public view returns(uint numfunded)
+    {
+        return no_funded;
+    }
+
+    function getEtherReceivedByProject (uint projectid) public view returns(uint amount)
+    {
+        return projects[projectid].ethers_received;
     }
 
 
