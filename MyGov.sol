@@ -137,8 +137,9 @@ contract MyGov is ERC20{
         string ipfshash;
         uint votedeadline;
         uint [] paymentamounts;
-        uint [] yesCounts_payment;
         uint [] payschedule;
+        uint [] yesCounts_payment;
+        uint ongoingPaymentIndex; // bugun 5 araliksa 10 araliktaki odemenin indexi
         uint yesCount;
         address owner;
         bool reserved;
@@ -174,7 +175,7 @@ contract MyGov is ERC20{
         return projectid;
     }
 
-    function voteForProjectProposal(uint projectid,bool choice) public{
+    function voteForProjectProposal(uint projectid,bool choice) public {
         require(2 < projects[projectid].votedeadline, "voting deadline is passed");
         // require(block.timestamp < votedeadline);
         require(balanceOf(msg.sender) > 0,"in order to vote, you should be a member"); // should have MyGov to vote
@@ -221,9 +222,24 @@ contract MyGov is ERC20{
     }
 
 
-    function voteForProjectPayment(uint projectid,bool choice) public{
 
-
+    // debug etmek icin return yesCount yapip bakmak kolay oluyor
+    function voteForProjectPayment(uint projectid,bool choice) public {
+        uint paymentDeadline = projects[projectid].payschedule[projects[projectid].ongoingPaymentIndex];
+        uint paymentAmount = projects[projectid].paymentamounts[projects[projectid].ongoingPaymentIndex];
+        require(2 < paymentDeadline, "voting deadline is passed");
+        // require(block.timestamp < votedeadline);
+        require(balanceOf(msg.sender) > 0,"in order to vote, you should be a member"); // should have MyGov to vote
+        require(projects[projectid].voters[msg.sender].did_vote == false, "you already have voted, you can't vote again"); // user hasn't voted yet
+        if(projects[projectid].voters[msg.sender].power == 0)
+        {
+            projects[projectid].voters[msg.sender].power = 1;
+        }
+        projects[projectid].voters[msg.sender].choice = choice;
+        projects[projectid].voters[msg.sender].did_vote = true;
+        if(choice){
+            projects[projectid].yesCount += projects[projectid].voters[msg.sender].power;
+        }
     }
 
 
@@ -246,17 +262,27 @@ contract MyGov is ERC20{
         projects[projectid].reserved = true;
         no_funded++;
     }
-
+    
 
     function withdrawProjectPayment(uint projectid) public{
+        uint paymentDeadline = projects[projectid].payschedule[projects[projectid].ongoingPaymentIndex];
+        uint paymentAmount = projects[projectid].paymentamounts[projects[projectid].ongoingPaymentIndex];
+        uint yesCount = projects[projectid].yesCounts_payment[projects[projectid].ongoingPaymentIndex];
 
+        require(yesCount * 100 >= userCount);
+
+        reservedWei -= paymentAmount;
+        
+        // withdrawda deadline a gerek var mi emin degilim, withdraw tam zamaninda yapilir diye tahmin ediyorum yoksa garip durumlar ortaya cikiyor
+        // require(block.timestamp < paymentDeadline);
+
+        projects[projectid].ongoingPaymentIndex++;
     }
 
     function getProjectOwner(uint projectid) public view returns(address projectowner)
     {
         return projects[projectid].owner;
     }
-
     function getProjectInfo(uint projectid) public view returns(string memory ipfshash, uint votedeadline,uint [] memory paymentamounts, uint [] memory payschedule) 
     {
         return (
@@ -265,20 +291,6 @@ contract MyGov is ERC20{
             projects[projectid].paymentamounts,
             projects[projectid].payschedule
         );
-    }
-
-    function getNoOfProjectProposals() public view returns(uint numproposals)
-    {
-        /*
-        because projectId is initially 0 and increments by one after each project proposal submission,
-        it can be considered as number of project proposals 
-        */
-        return projectId; 
-    }
-
-    function getIsProjectFunded(uint projectid) public view returns(bool funded)
-    {
-        return projects[projectid].reserved;
     }
 
     function getProjectNextPayment(uint projectid) public view returns(uint next)
@@ -295,12 +307,10 @@ contract MyGov is ERC20{
         */
         require(false,"no future payments");
     }
-
     function getNoOfFundedProjects () public view returns(uint numfunded)
     {
         return no_funded;
     }
-
     function getEtherReceivedByProject (uint projectid) public view returns(uint amount)
     {
         return projects[projectid].ethers_received;
