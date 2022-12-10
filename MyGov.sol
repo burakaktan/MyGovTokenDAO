@@ -32,7 +32,13 @@ contract MyGov is ERC20{
         // 2 token, 0.04 ether
         donateMyGovToken(2);
         require(msg.value == 40000000000000000, "you should pay 0.04 ethers");  
-        donateEther(40000000000000000); // 4*(10**16) --> 0.04 ether
+
+        // because the given ethers are already given 
+        // donateEther(40000000000000000); // 4*(10**16) --> 0.04 ether
+        
+        // TODO: remove the following line?
+        donatedEthers += msg.value;
+
         require(block.timestamp > surveydeadline, "deadline should be after current time");
         survey memory s;
         s.ipfshash = ipfshash;
@@ -104,12 +110,9 @@ contract MyGov is ERC20{
         userCount++;
     }
 
-    function donateEther(uint amount) public payable returns(uint amount2)
+    function donateEther() public payable
     {
-        bool status = payable(address(this)).send(amount);
-        require(status, "Failed to donate ethers");
-        donatedEthers += amount;
-        return amount;
+        donatedEthers += msg.value; // do we really need donatedEthers. I think Contract balance is enough.
     }
 
     function donateMyGovToken(uint amount) public 
@@ -162,7 +165,12 @@ contract MyGov is ERC20{
         //payments --> 5 token, 0.01 ether
         donateMyGovToken(5);
         require(msg.value == 10000000000000000, "you should pay 0.01 ethers");  
-        donateEther(10000000000000000); // 4*(10**16) --> 0.04 ether
+
+        //donateEther(10000000000000000); // 4*(10**16) --> 0.04 ether
+        
+        // TODO: remove the following line?
+        donatedEthers += msg.value;
+
         projectid = projectId;
         projectId++;
         projects[projectid].ipfshash = ipfshash;
@@ -271,6 +279,7 @@ contract MyGov is ERC20{
 
         require(yesCount * 100 >= userCount);
 
+        payable(msg.sender).transfer(paymentAmount);
         reservedWei -= paymentAmount;
         
         // withdrawda deadline a gerek var mi emin degilim, withdraw tam zamaninda yapilir diye tahmin ediyorum yoksa garip durumlar ortaya cikiyor
