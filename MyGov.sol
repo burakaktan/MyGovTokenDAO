@@ -13,6 +13,8 @@ contract MyGov is ERC20{
     uint donatedEthers = 0;
     uint donatedTokens = 0;
 
+    uint tokens_need_to_propose = 1;
+
     struct survey
     {
         address owner;
@@ -127,15 +129,18 @@ contract MyGov is ERC20{
         }
     }
 
+    // structure for storing voter information
     struct Voter
     {
         address delegating_to;
         bool did_vote;
+        mapping(uint => bool) paymentVoting;
         uint power;
         bool choice;
     }
 
 
+    // structure for storing project data
     struct ProjectData { 
         string ipfshash;
         uint votedeadline;
@@ -150,7 +155,7 @@ contract MyGov is ERC20{
         uint ethers_received;
     }
 
-    uint public userCount = 0; // TODO: what about the owner?
+    uint public userCount = 0; // q: what about the owner? a: At the beginning he hasn't any tokens so not a member
     mapping(uint => ProjectData) public projects;
     uint projectId = 0;
 
@@ -160,10 +165,10 @@ contract MyGov is ERC20{
 
     // TODO: check whether payschedule is incremental and after votedeadline
     function submitProjectProposal(string memory ipfshash, uint votedeadline,uint [] memory paymentamounts, uint [] memory payschedule) public payable returns (uint projectid) {
-        require(2 < votedeadline);
+        require(2 < votedeadline, "deadline is already passed");
         // require(block.timestamp < votedeadline);
         //payments --> 5 token, 0.01 ether
-        donateMyGovToken(5);
+        donateMyGovToken(tokens_need_to_propose);
         require(msg.value == 10000000000000000, "you should pay 0.01 ethers");  
 
         //donateEther(10000000000000000); // 4*(10**16) --> 0.04 ether
@@ -171,8 +176,11 @@ contract MyGov is ERC20{
         // TODO: remove the following line?
         donatedEthers += msg.value;
 
+        // give an ID to the project
         projectid = projectId;
         projectId++;
+
+        //store project data in projects array
         projects[projectid].ipfshash = ipfshash;
         projects[projectid].votedeadline = votedeadline;
         projects[projectid].paymentamounts = paymentamounts;
@@ -238,15 +246,16 @@ contract MyGov is ERC20{
         require(2 < paymentDeadline, "voting deadline is passed");
         // require(block.timestamp < votedeadline);
         require(balanceOf(msg.sender) > 0,"in order to vote, you should be a member"); // should have MyGov to vote
-        require(projects[projectid].voters[msg.sender].did_vote == false, "you already have voted, you can't vote again"); // user hasn't voted yet
+        require(projects[projectid].voters[msg.sender].paymentVoting[projects[projectid].ongoingPaymentIndex] == false, "you already have voted, you can't vote again"); // user hasn't voted yet
+        // if power isn't initialized, it is 1 (every one has one voting power at the beginning)
         if(projects[projectid].voters[msg.sender].power == 0)
         {
             projects[projectid].voters[msg.sender].power = 1;
         }
         projects[projectid].voters[msg.sender].choice = choice;
-        projects[projectid].voters[msg.sender].did_vote = true;
+        projects[projectid].voters[msg.sender].paymentVoting[projects[projectid].ongoingPaymentIndex] = true;
         if(choice){
-            projects[projectid].yesCount += projects[projectid].voters[msg.sender].power;
+            projects[projectid].yesCounts_payment[projects[projectid].ongoingPaymentIndex] += projects[projectid].voters[msg.sender].power;
         }
     }
 
@@ -272,12 +281,16 @@ contract MyGov is ERC20{
     }
     
 
-    function withdrawProjectPayment(uint projectid) public{
+    function withdrawProjectPayment(uint projectid) public payable returns (uint a){
+        
         uint paymentDeadline = projects[projectid].payschedule[projects[projectid].ongoingPaymentIndex];
         uint paymentAmount = projects[projectid].paymentamounts[projects[projectid].ongoingPaymentIndex];
         uint yesCount = projects[projectid].yesCounts_payment[projects[projectid].ongoingPaymentIndex];
-
-        require(yesCount * 100 >= userCount);
+        
+        // deadline gecmeden withdrawlamali?
+        require(block.timestamp < paymentDeadline, "payment deadline has passed");
+        require(reservedWei >= paymentAmount, "reserve is not enough");
+        require(yesCount * 100 >= userCount, "not enough vote for withdrawing (payschedule)");
 
         payable(msg.sender).transfer(paymentAmount);
         reservedWei -= paymentAmount;
@@ -285,6 +298,7 @@ contract MyGov is ERC20{
         // withdrawda deadline a gerek var mi emin degilim, withdraw tam zamaninda yapilir diye tahmin ediyorum yoksa garip durumlar ortaya cikiyor
         // require(block.timestamp < paymentDeadline);
 
+        projects[projectid].ethers_received += paymentAmount;
         projects[projectid].ongoingPaymentIndex++;
     }
 
@@ -292,12 +306,12 @@ contract MyGov is ERC20{
     {
         return projects[projectid].owner;
     }
-    function getProjectInfo(uint projectid) public view returns(string memory ipfshash, uint votedeadline,uint [] memory paymentamounts, uint [] memory payschedule) 
+    function getProjectInfo(uint projectid) public view returns(string memory ipfshash, uint votedeadline,uint paymentamounts, uint [] memory payschedule) 
     {
         return (
             projects[projectid].ipfshash,
             projects[projectid].votedeadline,
-            projects[projectid].paymentamounts,
+            projects[projectid].paymentamounts[0],
             projects[projectid].payschedule
         );
     }
@@ -320,9 +334,20 @@ contract MyGov is ERC20{
     {
         return no_funded;
     }
+
+    function getIsProjectFunded (uint projectid) public view returns(bool funded)
+    {
+        return projects[projectid].reserved;
+    }
+    
     function getEtherReceivedByProject (uint projectid) public view returns(uint amount)
     {
         return projects[projectid].ethers_received;
+    }
+
+    function getNoOfProjectProposals () public view returns (uint numproposals)
+    {
+        return projectId;
     }
 
 
