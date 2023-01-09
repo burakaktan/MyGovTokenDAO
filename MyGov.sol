@@ -41,7 +41,7 @@ contract MyGov is ERC20{
         // TODO: remove the following line?
         donatedEthers += msg.value;
 
-        require(block.timestamp > surveydeadline, "deadline should be after current time");
+        require(block.timestamp < surveydeadline, "deadline should be after current time");
         survey memory s;
         s.ipfshash = ipfshash;
         s.surveydeadline = surveydeadline;
