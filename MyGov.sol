@@ -305,7 +305,7 @@ contract MyGov is ERC20{
     {
         return projects[projectid].owner;
     }
-    function getProjectInfo(uint projectid) public view returns(string memory ipfshash, uint votedeadline,uint [] paymentamounts, uint [] memory payschedule) 
+    function getProjectInfo(uint projectid) public view returns(string memory ipfshash, uint votedeadline,uint [] memory paymentamounts, uint [] memory payschedule) 
     {
         return (
             projects[projectid].ipfshash,
