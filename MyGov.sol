@@ -13,7 +13,7 @@ contract MyGov is ERC20{
     uint donatedEthers = 0;
     uint donatedTokens = 0;
 
-    uint tokens_need_to_propose = 1;
+    uint tokens_need_to_propose = 5;
 
     struct survey
     {
@@ -165,8 +165,7 @@ contract MyGov is ERC20{
 
     // TODO: check whether payschedule is incremental and after votedeadline
     function submitProjectProposal(string memory ipfshash, uint votedeadline,uint [] memory paymentamounts, uint [] memory payschedule) public payable returns (uint projectid) {
-        require(2 < votedeadline, "deadline is already passed");
-        // require(block.timestamp < votedeadline);
+        require(block.timestamp < votedeadline, "deadline is already passed");
         //payments --> 5 token, 0.01 ether
         donateMyGovToken(tokens_need_to_propose);
         require(msg.value == 10000000000000000, "you should pay 0.01 ethers");  
@@ -192,7 +191,7 @@ contract MyGov is ERC20{
     }
 
     function voteForProjectProposal(uint projectid,bool choice) public {
-        require(2 < projects[projectid].votedeadline, "voting deadline is passed");
+        require(block.timestamp < projects[projectid].votedeadline, "voting deadline is passed");
         // require(block.timestamp < votedeadline);
         require(balanceOf(msg.sender) > 0,"in order to vote, you should be a member"); // should have MyGov to vote
         require(projects[projectid].voters[msg.sender].did_vote == false, "you already have voted, you can't vote again"); // user hasn't voted yet
@@ -243,7 +242,7 @@ contract MyGov is ERC20{
     function voteForProjectPayment(uint projectid,bool choice) public {
         uint paymentDeadline = projects[projectid].payschedule[projects[projectid].ongoingPaymentIndex];
         uint paymentAmount = projects[projectid].paymentamounts[projects[projectid].ongoingPaymentIndex];
-        require(2 < paymentDeadline, "voting deadline is passed");
+        require(block.timestamp < paymentDeadline, "voting deadline is passed");
         // require(block.timestamp < votedeadline);
         require(balanceOf(msg.sender) > 0,"in order to vote, you should be a member"); // should have MyGov to vote
         require(projects[projectid].voters[msg.sender].paymentVoting[projects[projectid].ongoingPaymentIndex] == false, "you already have voted, you can't vote again"); // user hasn't voted yet
