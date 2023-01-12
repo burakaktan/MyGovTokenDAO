@@ -10,7 +10,6 @@ contract MyGov is ERC20{
     uint tokens_to_mint = 10000000;
     mapping(address => bool) public took_faucet;
     address payable owner;
-    uint donatedEthers = 0;
     uint donatedTokens = 0;
 
     uint tokens_need_to_propose = 5;
@@ -34,12 +33,6 @@ contract MyGov is ERC20{
         // 2 token, 0.04 ether
         donateMyGovToken(2);
         require(msg.value == 40000000000000000, "you should pay 0.04 ethers");  
-
-        // because the given ethers are already given 
-        // donateEther(40000000000000000); // 4*(10**16) --> 0.04 ether
-        
-        // TODO: remove the following line?
-        donatedEthers += msg.value;
 
         require(block.timestamp < surveydeadline, "deadline should be after current time");
         survey memory s;
@@ -114,7 +107,6 @@ contract MyGov is ERC20{
 
     function donateEther() public payable
     {
-        donatedEthers += msg.value; // do we really need donatedEthers. I think Contract balance is enough.
     }
 
     function donateMyGovToken(uint amount) public 
@@ -153,6 +145,7 @@ contract MyGov is ERC20{
         bool reserved;
         mapping(address => Voter) voters;
         uint ethers_received;
+        bool withdraw_all_money; // whether payments has end or not
     }
 
     uint public userCount = 0; // q: what about the owner? a: At the beginning he hasn't any tokens so not a member
@@ -169,11 +162,6 @@ contract MyGov is ERC20{
         //payments --> 5 token, 0.01 ether
         donateMyGovToken(tokens_need_to_propose);
         require(msg.value == 10000000000000000, "you should pay 0.01 ethers");  
-
-        //donateEther(10000000000000000); // 4*(10**16) --> 0.04 ether
-        
-        // TODO: remove the following line?
-        donatedEthers += msg.value;
 
         // give an ID to the project
         projectid = projectId;
@@ -260,6 +248,7 @@ contract MyGov is ERC20{
 
 
     function reserveProjectGrant(uint projectid) public{
+        require(msg.sender==projects[projectid].owner, "only the owner can reserve");
         require(block.timestamp < projects[projectid].votedeadline);
         require(!projects[projectid].reserved); // can not reserve more than once.
         
@@ -281,7 +270,9 @@ contract MyGov is ERC20{
     
 
     function withdrawProjectPayment(uint projectid) public payable returns (uint a){
-        
+        require(msg.sender==projects[projectId].owner, "only the owner can reserve");
+        require(getIsProjectFunded(projectid), "project isn't funded");
+        require(!projects[projectid].withdraw_all_money, "project payment is completed");
         uint paymentDeadline = projects[projectid].payschedule[projects[projectid].ongoingPaymentIndex];
         uint paymentAmount = projects[projectid].paymentamounts[projects[projectid].ongoingPaymentIndex];
         uint yesCount = projects[projectid].yesCounts_payment[projects[projectid].ongoingPaymentIndex];
@@ -293,50 +284,58 @@ contract MyGov is ERC20{
 
         payable(msg.sender).transfer(paymentAmount);
         reservedWei -= paymentAmount;
-        
-        // withdrawda deadline a gerek var mi emin degilim, withdraw tam zamaninda yapilir diye tahmin ediyorum yoksa garip durumlar ortaya cikiyor
-        // require(block.timestamp < paymentDeadline);
 
         projects[projectid].ethers_received += paymentAmount;
         projects[projectid].ongoingPaymentIndex++;
+        if(projects[projectid].ongoingPaymentIndex == projects[projectid].payschedule.length)
+            projects[projectid].withdraw_all_money = true;
     }
 
     function getProjectOwner(uint projectid) public view returns(address projectowner)
     {
         return projects[projectid].owner;
     }
-    function getProjectInfo(uint projectid) public view returns(string memory ipfshash, uint votedeadline,uint [] memory paymentamounts, uint [] memory payschedule) 
+    function getProjectInfo(uint projectid) public view returns(string memory ipfshash, uint votedeadline,uint paymentamounts, uint [] memory payschedule) 
     {
         return (
             projects[projectid].ipfshash,
             projects[projectid].votedeadline,
-            projects[projectid].paymentamounts,
+            projects[projectid].paymentamounts[0],
             projects[projectid].payschedule
         );
     }
 
     function getProjectNextPayment(uint projectid) public view returns(uint next)
     {
-        require(projects[projectid].reserved, "the project isn't funded");
-        uint i = 0;
-        for(i = 0; i < projects[projectid].payschedule.length;i++)
-        {
-            if(projects[projectid].payschedule[i] > block.timestamp)
-                return projects[projectid].payschedule[i];
-        }
-        /*
-        if control reaches here, there is no future payments
-        */
-        require(false,"no future payments");
+        require(getIsProjectFunded(projectid), "the project isn't funded");
+        require(!projects[projectid].withdraw_all_money,"all payments are finished");
+        return projects[projectid].payschedule[projects[projectid].ongoingPaymentIndex];
     }
+
+
     function getNoOfFundedProjects () public view returns(uint numfunded)
     {
-        return no_funded;
+        // previously the implemenation was 1 line to avoid for loops:return no_funded;
+        /*
+        however, it wasn't sufficient. Why?
+        note that there isn't enough vote for PAYSCHEDULE (1/100 of members), the funding is lost (the project isn't funded anymore)
+        to also check this condition while finding out number of funded projects, getIsProject funded should be called for
+        every project. Therefore, a for loop is needed here
+        */
+        uint ans = 0;
+        for(uint p = 0;p < projectId; p++)
+        {
+            if(getIsProjectFunded(p))
+            {
+                ans++;
+            }
+        }
+        return ans; 
     }
 
     function getIsProjectFunded (uint projectid) public view returns(bool funded)
     {
-        return projects[projectid].reserved;
+        return (projects[projectid].reserved) && (projects[projectid].payschedule[projects[projectid].ongoingPaymentIndex] < block.timestamp);
     }
     
     function getEtherReceivedByProject (uint projectid) public view returns(uint amount)
@@ -347,6 +346,11 @@ contract MyGov is ERC20{
     function getNoOfProjectProposals () public view returns (uint numproposals)
     {
         return projectId;
+    }
+
+    function getBlockTimestamp() public view returns (uint time)
+    {
+        return block.timestamp;
     }
 
 
