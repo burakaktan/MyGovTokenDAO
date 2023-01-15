@@ -8,12 +8,15 @@ contract MyGov is ERC20{
     
     string public mymessage ;
     uint tokens_to_mint = 10000000;
+
+    // to make sure every user calls faucet at most once
     mapping(address => bool) public took_faucet;
     address payable owner;
     uint donatedTokens = 0;
 
     uint tokens_need_to_propose = 5;
 
+    // structure to keep submitted surveys
     struct survey
     {
         address owner;
@@ -25,17 +28,19 @@ contract MyGov is ERC20{
         uint numtaken;
     }
 
+    // survey array
     survey [] surveys;
 
-
+    // function to submit surveys with required inputs, requirements are enough tokens and deadline set by owner should be in future
     function submitSurvey(string memory ipfshash, uint surveydeadline, uint numchoices, uint atmostchoice) payable public returns (uint surveyid)
     {
         // 2 token, 0.04 ether
+        // requires to set deadline in future and make payments
         donateMyGovToken(2);
         require(msg.value == 40000000000000000, "you should pay 0.04 ethers");  
-
         require(block.timestamp < surveydeadline, "deadline should be after current time");
         survey memory s;
+        // assigns inputs to struct fields
         s.ipfshash = ipfshash;
         s.surveydeadline = surveydeadline;
         s.numchoices = numchoices;
@@ -47,8 +52,13 @@ contract MyGov is ERC20{
         return surveys.length;
     }
 
+    // function for users to take survey
+    // checks if user is a member
+    // checks if survey with given id exists
+    // checks if user selected too many options and validity of choices
     function takeSurvey(uint surveyid, uint [] calldata choices) public
     {
+        // user must have mygov and be a member
         require(balanceOf(msg.sender) > 0, "you aren't a member");
         require(surveys.length > surveyid, "survey with given id doesn't exist");
         require(choices.length <= surveys[surveyid].atmostchoice, "you selected so many choices");
@@ -61,12 +71,15 @@ contract MyGov is ERC20{
         surveys[surveyid].numtaken++;
     }
 
+    // get survey results after checking if survey with id exits, it returns number of total votes
+    // in results array it keep number of votes belonging to each option ad corresponding index of results array
     function getSurveyResults(uint surveyid) public view returns(uint numtaken, uint [] memory results)
     {
         require(surveys.length > surveyid, "survey with given id doesn't exist");
         return (surveys[surveyid].numtaken, surveys[surveyid].choices);
     }
 
+    // get survey info by survey id
     function getSurveyInfo(uint surveyid) public view returns(string memory ipfshash, uint surveydeadline,uint numchoices, uint atmostchoice)
     {
         require(surveys.length > surveyid, "survey with given id doesn't exist");
@@ -95,7 +108,7 @@ contract MyGov is ERC20{
         tokens_to_mint = tokensupply;
     }
 
-
+    // faucet, allowed only once for each user
     function faucet() public{
         require(tokens_to_mint >= 1, "minting limit is suceeded");
         require(!took_faucet[msg.sender], "you already took a faucet");
@@ -135,20 +148,20 @@ contract MyGov is ERC20{
     // structure for storing project data
     struct ProjectData { 
         string ipfshash;
-        uint votedeadline;
-        uint [] paymentamounts;
-        uint [] payschedule;
-        uint [] yesCounts_payment;
-        uint ongoingPaymentIndex; // bugun 5 araliksa 10 araliktaki odemenin indexi
+        uint votedeadline; // proposal deadline
+        uint [] paymentamounts; // payment amounts for each payment date
+        uint [] payschedule; // payment schedule
+        uint [] yesCounts_payment; // voting belonging to each payment scheduled, is kept at corresponding index of this array
+        uint ongoingPaymentIndex; // index of next payment, this variable lets us know which payment is next and it is correspoding index of next payment in paymentamounts, payschedule, yesCounts_payment
         uint yesCount;
         address owner;
-        bool reserved;
-        mapping(address => Voter) voters;
+        bool reserved; // is reserveProjectGrant be called successfully
+        mapping(address => Voter) voters; // each project has its own mapping to users(voters) and their votes
         uint ethers_received;
         bool withdraw_all_money; // whether payments has end or not
     }
 
-    uint public userCount = 0; // q: what about the owner? a: At the beginning he hasn't any tokens so not a member
+    uint public userCount = 0;
     mapping(uint => ProjectData) public projects;
     uint projectId = 0;
 
@@ -156,7 +169,7 @@ contract MyGov is ERC20{
 
     uint no_funded = 0;
 
-    // TODO: check whether payschedule is incremental and after votedeadline
+    // checks if ethers and mygov are enough, and also checks for votedeadline to be in future and payschedule is after votedeadline and incremental
     function submitProjectProposal(string memory ipfshash, uint votedeadline,uint [] memory paymentamounts, uint [] memory payschedule) public payable returns (uint projectid) {
         require(block.timestamp < votedeadline, "deadline is already passed");
         //payments --> 5 token, 0.01 ether
@@ -178,11 +191,12 @@ contract MyGov is ERC20{
         return projectid;
     }
 
+    // checks if deadline has passed, checks if voter is a member, checks if voter has already vote or delegated to someone -if someone has delegated to someone did_vote=true-
     function voteForProjectProposal(uint projectid,bool choice) public {
         require(block.timestamp < projects[projectid].votedeadline, "voting deadline is passed");
-        // require(block.timestamp < votedeadline);
         require(balanceOf(msg.sender) > 0,"in order to vote, you should be a member"); // should have MyGov to vote
         require(projects[projectid].voters[msg.sender].did_vote == false, "you already have voted, you can't vote again"); // user hasn't voted yet
+        // initially users have 0 power, when they vote it gets fixed to 1
         if(projects[projectid].voters[msg.sender].power == 0)
         {
             projects[projectid].voters[msg.sender].power = 1;
@@ -194,13 +208,18 @@ contract MyGov is ERC20{
         }
     }
 
+
+    // delegate vote to another user
+    // a user cant delegate himself
+    // a user should be a member to delegate/vote
+    // a user cant delegate to someone after voting or delegating to another person
     function delegateVoteTo(address memberaddr, uint projectid) public{
         require(memberaddr != msg.sender, "you can't delegate yourself");
         require(balanceOf(msg.sender) > 0,"in order to delegate vote, you should be a member"); // should have MyGov to vote
         require(!projects[projectid].voters[msg.sender].did_vote, "you already voted");
         projects[projectid].voters[msg.sender].did_vote = true;
         projects[projectid].voters[msg.sender].delegating_to = memberaddr;
-        // loop check
+        // loop check for chain of delegation
         address ptr = projects[projectid].voters[msg.sender].delegating_to;
         while(projects[projectid].voters[ptr].delegating_to != address(0))
         {
@@ -224,14 +243,13 @@ contract MyGov is ERC20{
         }
     }
 
-
-
-    // debug etmek icin return yesCount yapip bakmak kolay oluyor
+    // vote for next payment
+    // check for deadline
+    // check if user is a member
     function voteForProjectPayment(uint projectid,bool choice) public {
         uint paymentDeadline = projects[projectid].payschedule[projects[projectid].ongoingPaymentIndex];
         uint paymentAmount = projects[projectid].paymentamounts[projects[projectid].ongoingPaymentIndex];
         require(block.timestamp < paymentDeadline, "voting deadline is passed");
-        // require(block.timestamp < votedeadline);
         require(balanceOf(msg.sender) > 0,"in order to vote, you should be a member"); // should have MyGov to vote
         require(projects[projectid].voters[msg.sender].paymentVoting[projects[projectid].ongoingPaymentIndex] == false, "you already have voted, you can't vote again"); // user hasn't voted yet
         // if power isn't initialized, it is 1 (every one has one voting power at the beginning)
@@ -247,21 +265,20 @@ contract MyGov is ERC20{
     }
 
 
+    // only owner of project can reserve, deadline shouldn't be passed, checks if it is already reserved, checks for votes and checks if there are enough to reserve
     function reserveProjectGrant(uint projectid) public{
         require(msg.sender==projects[projectid].owner, "only the owner can reserve");
-        require(block.timestamp < projects[projectid].votedeadline);
-        require(!projects[projectid].reserved); // can not reserve more than once.
+        require(block.timestamp < projects[projectid].votedeadline, "deadline has passed");
+        require(!projects[projectid].reserved, "already reserved"); // can not reserve more than once.
         
-        require(projects[projectid].yesCount * 10 >= userCount); // check if 10% said yes
+        require(projects[projectid].yesCount * 10 >= userCount, "not enough vote"); // check if 10% said yes
         
         uint total_payment = 0;
         for(uint i=0; i<projects[projectid].paymentamounts.length; i++){
             total_payment += projects[projectid].paymentamounts[i];
         }
 
-        // TODO: time trigger??
-
-        require(address(this).balance - reservedWei >= total_payment); 
+        require(address(this).balance - reservedWei >= total_payment, "not enough wei"); 
 
         reservedWei += total_payment;
         projects[projectid].reserved = true;
@@ -269,6 +286,8 @@ contract MyGov is ERC20{
     }
     
 
+    // to be able to withdraw, it should be called by owner, project must be funded, project payment must be ongoing - not over, deadline hasn't passed
+    // reserved amount is enough, enough vote
     function withdrawProjectPayment(uint projectid) public payable returns (uint a){
         require(msg.sender==projects[projectId].owner, "only the owner can reserve");
         require(getIsProjectFunded(projectid), "project isn't funded");
@@ -277,7 +296,6 @@ contract MyGov is ERC20{
         uint paymentAmount = projects[projectid].paymentamounts[projects[projectid].ongoingPaymentIndex];
         uint yesCount = projects[projectid].yesCounts_payment[projects[projectid].ongoingPaymentIndex];
         
-        // deadline gecmeden withdrawlamali?
         require(block.timestamp < paymentDeadline, "payment deadline has passed");
         require(reservedWei >= paymentAmount, "reserve is not enough");
         require(yesCount * 100 >= userCount, "not enough vote for withdrawing (payschedule)");
@@ -291,20 +309,25 @@ contract MyGov is ERC20{
             projects[projectid].withdraw_all_money = true;
     }
 
+    // gets project owner by projectid
     function getProjectOwner(uint projectid) public view returns(address projectowner)
     {
         return projects[projectid].owner;
     }
-    function getProjectInfo(uint projectid) public view returns(string memory ipfshash, uint votedeadline,uint paymentamounts, uint [] memory payschedule) 
+
+
+    // gets project info by projectid
+    function getProjectInfo(uint projectid) public view returns(string memory ipfshash, uint votedeadline,uint [] memory paymentamounts, uint [] memory payschedule) 
     {
         return (
             projects[projectid].ipfshash,
             projects[projectid].votedeadline,
-            projects[projectid].paymentamounts[0],
+            projects[projectid].paymentamounts,
             projects[projectid].payschedule
         );
     }
 
+    // gets nextprojectpayment if it is funded and if it is still ongoing(it didn't receive all payments)
     function getProjectNextPayment(uint projectid) public view returns(uint next)
     {
         require(getIsProjectFunded(projectid), "the project isn't funded");
@@ -312,7 +335,7 @@ contract MyGov is ERC20{
         return projects[projectid].payschedule[projects[projectid].ongoingPaymentIndex];
     }
 
-
+    // get no of funded prjects
     function getNoOfFundedProjects () public view returns(uint numfunded)
     {
         // previously the implemenation was 1 line to avoid for loops:return no_funded;
@@ -333,11 +356,14 @@ contract MyGov is ERC20{
         return ans; 
     }
 
+    // get if project is funded, checks for if payment is reserved and if next payment is in future, which means if there is a payment that hasn't occured
+    // in past due to not enough votes or owner not withdrawing payment we assumed it is not funded and didn't include such projects in funded category
     function getIsProjectFunded (uint projectid) public view returns(bool funded)
     {
         return (projects[projectid].reserved) && (projects[projectid].payschedule[projects[projectid].ongoingPaymentIndex] < block.timestamp);
     }
     
+    // get ethers received by project
     function getEtherReceivedByProject (uint projectid) public view returns(uint amount)
     {
         return projects[projectid].ethers_received;
