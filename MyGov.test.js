@@ -12,14 +12,15 @@ describe("MyGov", function () {
 
     return {mygov, signers: signers.slice(0, count), owner: signers[0]};
   }
-
-  user_counts = [50];
+  // try with 100, 200, 300 and 350 users
+  user_counts = [100,200,300,350];
 
 
   for(let j = 0; j < user_counts.length; j++){
     const curr_count = user_counts[j];
 
-    it("test faucet with " + curr_count + " users", async function () {
+    it("test the systems with " + curr_count + " users", async function () {
+      console.log("started working")
       const {mygov, signers, owner} = await getData(curr_count);
 
       // all users start with 0 MyGov balances, then %90 calls faucet
@@ -59,6 +60,8 @@ describe("MyGov", function () {
           expect(balance.toNumber()).to.equal(0);
         }
       }
+
+      console.log('end of faucet stuff')
       // 5 users try to takeSurvey with id=1 but there is no survey, so it reverts
       for(let i = 0; i<5; i++){
         await expect(mygov.connect(signers[i]).takeSurvey(1, [1])).to.be.revertedWith("survey with given id doesn't exist");
@@ -67,21 +70,17 @@ describe("MyGov", function () {
 
       // submit 4 surveys
       let testNow = Date.now();
-      for(let i = 0; i < 4; i++){
-        let now = Date.now();
-        if(i==1){
-          testNow = now + 100
-        }
-        
-        await mygov.submitSurvey("ipfshash", now + 100, 2, 1);
-        // expect(surveysLength.to.equal(i));
-      }
+      await mygov.connect(signers[21]).transfer(await signers[20].getAddress(), 1)
+      await mygov.connect(signers[22]).transfer(await signers[20].getAddress(), 1)
+      let now = Date.now()
+      testNow = now + 1000
+      await mygov.connect(signers[20]).submitSurvey("ipfshash", now + 1000, 2, 1, {value: 40000000000000000n});
 
-      let surveyOwner = await mygov.getSurveyOwner(1);
-      expect(surveyOwner).to.equal(await signers[0].getAddress());
+      let surveyOwner = await mygov.getSurveyOwner(0);
+      expect(surveyOwner).to.equal(await signers[20].getAddress());
 
-      expect(await mygov.getNoOfSurveys()).to.equal(4);
-      let surveyInfo = await mygov.getSurveyInfo(1)
+      expect(await mygov.getNoOfSurveys()).to.equal(1);
+      let surveyInfo = await mygov.getSurveyInfo(0)
       expect(surveyInfo[0]).to.equal("ipfshash");
       expect(surveyInfo[1]).to.equal(testNow);
       expect(surveyInfo[2]).to.equal(2);
@@ -89,14 +88,14 @@ describe("MyGov", function () {
 
       for(let i = 0; i<5; i++){
         if(i == 0){
-          await mygov.connect(signers[i]).takeSurvey(1, [0])
+          await mygov.connect(signers[i]).takeSurvey(0, [0])
         }else{
-          await mygov.connect(signers[i]).takeSurvey(1, [1])
+          await mygov.connect(signers[i]).takeSurvey(0, [1])
         };
         // expect().to.be.revertedWith("revert survey with given id doesn't exist");
       }
 
-      let surveyResults = await mygov.getSurveyResults(1)
+      let surveyResults = await mygov.getSurveyResults(0)
       
       //vote count
       expect(surveyResults[0].toString()).to.equal('5')
@@ -116,9 +115,13 @@ describe("MyGov", function () {
       await mygov.connect(signers[9]).transfer(await signers[7].getAddress(), 1)
       await mygov.connect(signers[8]).transfer(await signers[7].getAddress(), 1)
 
-      now = Date.now()
-      await mygov.connect(signers[7]).submitProjectProposal("ipfshash", now + 100, [100, 150], [now+500, now+800])
+      console.log('before submit ptoject proposal')
       
+      now = Date.now()
+      console.log("before submit project")
+      await mygov.connect(signers[7]).submitProjectProposal("ipfshash", now + 1000, [100, 150], [now+5000, now+8000],{ value: 10000000000000000n });
+      console.log("after submit project")
+
       let projectOwner = await mygov.getProjectOwner(0)
       expect(projectOwner).to.equal(await signers[7].getAddress())
 
@@ -126,10 +129,12 @@ describe("MyGov", function () {
       expect(noOfProjectProposals).to.equal(1)
 
       let projectInfo = await mygov.getProjectInfo(0)
+      console.log('project info:'+ projectInfo)
+      console.log('project info20:'+ projectInfo[2][0])
       expect(projectInfo[0]).to.equal('ipfshash')
-      expect(projectInfo[1]).to.equal(now+100)
+      expect(projectInfo[1]).to.equal(now+1000)
       expect(projectInfo[2][0]).to.equal(100)
-      expect(projectInfo[3][1]).to.equal(now+800)
+      expect(projectInfo[3][1]).to.equal(now+8000)
 
 
       // not funded yet, error
@@ -137,14 +142,31 @@ describe("MyGov", function () {
 
 
       // half of people votes yes
-      for(let i = 0; i<signers.length * 5 / 10; i++){
-        await mygov.connect(signers[i]).voteForProjectProposal(0, true)
+      for(let i = 0; i<signers.length * 15 / 16; i++){
+        const balance = await mygov.balanceOf(await signers[i].getAddress());
+        if(balance == 0){
+          await expect(mygov.connect(signers[i]).voteForProjectProposal(0, true)).to.be.revertedWith("in order to vote, you should be a member")
+        }else{
+          await mygov.connect(signers[i]).voteForProjectProposal(0, true)
+        }
         // expect().to.be.revertedWith("revert survey with given id doesn't exist");
       }
 
-
+    console.log('1')
       await expect(mygov.connect(signers[0]).reserveProjectGrant(0)).to.be.revertedWith("only the owner can reserve")
-      await expect(mygov.connect(signers[7]).reserveProjectGrant(0)).to.be.revertedWith("not enough wei")
+      console.log('2')
+      await mygov.connect(signers[7]).reserveProjectGrant(0)
+      console.log('3')
+
+      for(let i = 0; i<signers.length * 5 / 10; i++){
+        const balance = await mygov.balanceOf(await signers[i].getAddress());
+        if(balance == 0){
+          await expect(mygov.connect(signers[i]).voteForProjectPayment(0, true)).to.be.revertedWith("in order to vote, you should be a member")
+        }else{
+          await mygov.connect(signers[i]).voteForProjectPayment(0, true)
+        }
+      }
+      await mygov.connect(signers[7]).withdrawProjectPayment(0)
 
 
       // mygov transfer
@@ -155,7 +177,7 @@ describe("MyGov", function () {
       expect((await mygov.balanceOf(await signers[1].getAddress()))).to.equal(2)
       
 
-      // console.log(await mygov.getProjectNextPayment(0))
+      //console.log(await mygov.getProjectNextPayment(0))
 
       // ex
       // await mygov.connect(signers[0]).reserveProjectGrant(0)
