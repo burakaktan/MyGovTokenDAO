@@ -177,7 +177,7 @@ describe("MyGov", function () {
       expect((await mygov.balanceOf(await signers[1].getAddress()))).to.equal(2)
       
 
-      //console.log(await mygov.getProjectNextPayment(0))
+      console.log(await mygov.getProjectNextPayment(0))
 
       // ex
       // await mygov.connect(signers[0]).reserveProjectGrant(0)
