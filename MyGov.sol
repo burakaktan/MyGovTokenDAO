@@ -360,7 +360,7 @@ contract MyGov is ERC20{
     // in past due to not enough votes or owner not withdrawing payment we assumed it is not funded and didn't include such projects in funded category
     function getIsProjectFunded (uint projectid) public view returns(bool funded)
     {
-        return (projects[projectid].reserved) && (projects[projectid].payschedule[projects[projectid].ongoingPaymentIndex] < block.timestamp);
+        return (projects[projectid].reserved) && (projects[projectid].payschedule[projects[projectid].ongoingPaymentIndex] > block.timestamp);
     }
     
     // get ethers received by project
