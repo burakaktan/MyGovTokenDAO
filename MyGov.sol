@@ -288,8 +288,8 @@ contract MyGov is ERC20{
 
     // to be able to withdraw, it should be called by owner, project must be funded, project payment must be ongoing - not over, deadline hasn't passed
     // reserved amount is enough, enough vote
-    function withdrawProjectPayment(uint projectid) public payable returns (uint a){
-        require(msg.sender==projects[projectId].owner, "only the owner can reserve");
+    function withdrawProjectPayment(uint projectid) public payable{
+        require(msg.sender==projects[projectid].owner, "only the owner can withdraw");
         require(getIsProjectFunded(projectid), "project isn't funded");
         require(!projects[projectid].withdraw_all_money, "project payment is completed");
         uint paymentDeadline = projects[projectid].payschedule[projects[projectid].ongoingPaymentIndex];
